@@ -18,7 +18,9 @@ class ViewerCannonPoints
 		
 		this.hoveringOverPoint = null
 		this.linkingPoints = false
-		
+
+		this.cannonTriggers = new Array(8).fill([])
+
 		this.modelPoint = new ModelBuilder()
 			.addSphere(-150, -150, -150, 150, 150, 150)
 			.calculateNormals()
@@ -103,7 +105,7 @@ class ViewerCannonPoints
 		panel.addSelectionNumericInput(selectionGroup,  "Rot. X", -1000000, 1000000, selectedPoints.map(p =>  p.rotation.x),  null, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].rotation.x = x })
 		panel.addSelectionNumericInput(selectionGroup,  "Rot. Y", -1000000, 1000000, selectedPoints.map(p =>  p.rotation.y),  null, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].rotation.y = x })
 		panel.addSelectionNumericInput(selectionGroup,  "Rot. Z", -1000000, 1000000, selectedPoints.map(p =>  p.rotation.z),  null, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].rotation.z = x })
-		panel.addSelectionNumericInput(selectionGroup, "Unknown",        0,  0xffff, selectedPoints.map(p =>  p.id),           1.0, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].id = x })
+		// panel.addSelectionNumericInput(selectionGroup, "Unknown",        0,  0xffff, selectedPoints.map(p =>  p.id),           1.0, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].id = x })
 		
 		let effectOptions =
 		[
@@ -174,6 +176,8 @@ class ViewerCannonPoints
 			this.renderers.push(point.rendererDirectionUp)
 			this.renderers.push(point.rendererPanel)
 		}
+
+		//require('fs').appendFile('out.txt', 'refresh\n')
 		
 		this.refreshPanels()
 	}
@@ -336,6 +340,18 @@ class ViewerCannonPoints
 			else
 			{
 				hoveringOverElem.selected = true
+				require('fs').appendFile('out.txt', this.cannonTriggers.toString() + '\n')
+				let index = this.data.cannonPoints.nodes.findIndex(p => p === hoveringOverElem)
+				require('fs').appendFile('out.txt', 'test2\n')
+				for (let tri of this.cannonTriggers[index])
+				{
+					require('fs').appendFile('out.txt', tri.flags + '\n')
+					tri.color = [1, 1, 0, 1]
+					tri.forced = true
+				}
+				require('fs').appendFile('out.txt', 'test3\n')
+				this.window.refreshKcl()
+				require('fs').appendFile('out.txt', 'test4\n')
 				this.refreshPanels()
 				this.viewer.setCursor("-webkit-grabbing")
 			}
@@ -477,7 +493,25 @@ class ViewerCannonPoints
 			}
 			else
 				point.rendererPanel.setEnabled(false)
+			/*
+			if (point.selected)
+			{
+				let index = this.data.cannonPoints.nodes.findIndex(p => p === point)
+				let triggers = this.viewer.kcl.triangles.filter(t => t.flags & 0x1f == 0x11) //&& t.flags >>> 5 == index)
+
+				for (let tri in this.viewer.kcl.triangles)
+				{
+					tri.color = [1, 1, 0, 1]
+					tri.render = true
+					refreshKcl = true
+				}
+			}
+			*/
 		}
+
+		
+		//if (refreshKcl)
+			//this.window.refreshKcl(false)
 		
 		this.scene.render(this.viewer.gl, this.viewer.getCurrentCamera())
 		this.sceneAfter.clearDepth(this.viewer.gl)

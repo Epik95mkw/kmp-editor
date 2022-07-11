@@ -84,6 +84,7 @@ class Viewer
 				GLProgram.makeFromSrc(this.gl, vertexSrc, fragmentSrcUnshaded)
 				.registerLocations(this.gl, ["aPosition", "aNormal"], ["uMatProj", "uMatView", "uMatModel", "uDiffuseColor"]))
 				
+		this.kcl = null
 		this.model = null
 		this.collision = null
 			

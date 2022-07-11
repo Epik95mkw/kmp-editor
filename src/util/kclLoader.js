@@ -3,11 +3,12 @@ const { ModelBuilder } = require("./modelBuilder.js")
 const { Vec3 } = require("../math/vec3.js")
 
 
-class KclLoader
+class Kcl
 {
-	static load(bytes, cfg)
+	constructor(bytes)
 	{
 		let parser = new BinaryParser(bytes)
+		this.triangles = []
 		
 		let section1Offset = parser.readUInt32()
 		let section2Offset = parser.readUInt32()
@@ -34,8 +35,58 @@ class KclLoader
 			normals.push(new Vec3(x, -z, -y))
 		}
 		
-		let model = new ModelBuilder()
-		
+		parser.seek(section3Offset + 0x10)
+		while (parser.head < section4Offset)
+		{
+			let len = parser.readFloat32()
+			let posIndex = parser.readUInt16()
+			let dirIndex = parser.readUInt16()
+			let normAIndex = parser.readUInt16()
+			let normBIndex = parser.readUInt16()
+			let normCIndex = parser.readUInt16()
+			let collisionFlags = parser.readUInt16()
+			
+			if (posIndex >= vertices.length ||
+				dirIndex >= normals.length ||
+				normAIndex >= normals.length ||
+				normBIndex >= normals.length ||
+				normCIndex >= normals.length)
+				continue
+			
+			let vertex = vertices[posIndex]
+			let direction = normals[dirIndex]
+			let normalA = normals[normAIndex]
+			let normalB = normals[normBIndex]
+			let normalC = normals[normCIndex]
+			
+			let crossA = normalA.cross(direction)
+			let crossB = normalB.cross(direction)
+			let v1 = vertex
+			let v2 = vertex.add(crossB.scale(len / crossB.dot(normalC)))
+			let v3 = vertex.add(crossA.scale(len / crossA.dot(normalC)))
+			
+			if (!v1.isFinite() || !v2.isFinite() || !v3.isFinite())
+				continue
+			
+			if (collisionFlags & 0x1f >= 32)
+				continue
+
+			this.triangles.push({
+				v1: v1,
+				v2: v2,
+				v3: v3,
+				normal: v2.sub(v1).cross(v3.sub(v1)).normalize(),
+				flags: collisionFlags,
+				color: [1, 1, 1, 1],
+				render: false,
+				forced: false
+			})
+		}
+	}
+
+
+	setProperties(cfg)
+	{
 		let collisionTypeData =
 		[
 			{ isDeath: false, isInvis: false, isEffect: false, isWall: false, c: [1.0, 1.0, 1.0, 1.0] }, // Road
@@ -71,45 +122,18 @@ class KclLoader
 			{ isDeath: false, isInvis: false, isEffect: false, isWall: true,  c: [0.8, 0.7, 0.8, 1.0] }, // Special Wall
 			{ isDeath: false, isInvis: false, isEffect: false, isWall: true,  c: [0.6, 0.6, 0.6, 1.0] }, // Wall
 		]
-		
-		parser.seek(section3Offset + 0x10)
-		while (parser.head < section4Offset)
+
+		for (let tri of this.triangles)
 		{
-			let len = parser.readFloat32()
-			let posIndex = parser.readUInt16()
-			let dirIndex = parser.readUInt16()
-			let normAIndex = parser.readUInt16()
-			let normBIndex = parser.readUInt16()
-			let normCIndex = parser.readUInt16()
-			let collisionFlags = parser.readUInt16()
-			
-			if (posIndex >= vertices.length ||
-				dirIndex >= normals.length ||
-				normAIndex >= normals.length ||
-				normBIndex >= normals.length ||
-				normCIndex >= normals.length)
+			if (tri.forced)
+			{
+				tri.render = true
+				tri.forced = false
 				continue
-			
-			let vertex = vertices[posIndex]
-			let direction = normals[dirIndex]
-			let normalA = normals[normAIndex]
-			let normalB = normals[normBIndex]
-			let normalC = normals[normCIndex]
-			
-			let crossA = normalA.cross(direction)
-			let crossB = normalB.cross(direction)
-			let v1 = vertex
-			let v2 = vertex.add(crossB.scale(len / crossB.dot(normalC)))
-			let v3 = vertex.add(crossA.scale(len / crossA.dot(normalC)))
-			
-			if (!v1.isFinite() || !v2.isFinite() || !v3.isFinite())
-				continue
-			
-			let flagBasicType = collisionFlags & 0x1f
-			if (flagBasicType >= collisionTypeData.length)
-				continue
-			
-			let data = collisionTypeData[flagBasicType]
+			}
+
+			tri.render = false
+			let data = collisionTypeData[tri.flags & 0x1f]
 
 			if (cfg && data.isWall && cfg.kclEnableWalls !== undefined && !cfg.kclEnableWalls)
 				continue
@@ -123,9 +147,12 @@ class KclLoader
 			if (cfg && data.isEffect && cfg.kclEnableEffects !== undefined && !cfg.kclEnableEffects)
 				continue
 			
-			let color = data.c
+
 			if (cfg && cfg.kclEnableColors !== undefined && !cfg.kclEnableColors)
-				color = [1, 1, 1, 1]
+				tri.color = [1, 1, 1, 1]
+			else
+				tri.color = data.c
+
 
 			if (cfg && cfg.kclHighlighter !== undefined)
 			{
@@ -133,32 +160,69 @@ class KclLoader
 				switch (cfg.kclHighlighter)
 				{
 					case 1:
-						highlighted = collisionFlags & 0x2000
+						highlighted = tri.flags & 0x2000
 						break
 
 					case 2:
-						let v1to2 = v2.sub(v1)
-						let v1to3 = v3.sub(v1)
-						let normal = v1to2.cross(v1to3).normalize()
-						highlighted = data.isWall && normal.dot(new Vec3(0, 0, 1)) > 0.9
+						highlighted = data.isWall && tri.normal.dot(new Vec3(0, 0, 1)) > 0.9
 						break
 
 					case 3:
-						highlighted = data.isWall && collisionFlags & 0x8000
+						highlighted = data.isWall && tri.flags & 0x8000
 						break
 				}
 
 				if (highlighted)
-					color = [1.0, 1.0, 0.0, 1.0]
+					tri.color = [1.0, 1.0, 0.0, 1.0]
 			}
 			
-			model.addTri(v1, v2, v3, color, color, color)
+			tri.render = true
 		}
+
+		return this
+	}
+
+
+	refreshModel()
+	{
+		let model = new ModelBuilder()
+
+		for (let tri of this.triangles)
+			if (tri.render)
+				model.addTri(tri.v1, tri.v2, tri.v3, tri.color, tri.color, tri.color)
 		
 		return model.calculateNormals()
+	}
+
+	getCannonTriggers1()
+	{
+		let triggers = []
+		for (let i = 0; i < 8; i++)
+		{
+			let indexTriggers = []
+			for (let tri of this.triangles)
+			{
+				if (tri.flags & 0x1f == 17)
+					indexTriggers.push(tri)
+			}
+			triggers.push(indexTriggers)
+		}
+
+		return triggers
+	}
+
+	getCannonTriggers()
+	{
+		let triggers = []
+		for (let tri of this.triangles)
+		{
+			//if (tri.flags & 0x1f == 0)
+				triggers.push(tri)
+		}
+		return triggers
 	}
 }
 
 
 if (module)
-	module.exports = { KclLoader }
+	module.exports = { Kcl }

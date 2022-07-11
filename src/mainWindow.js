@@ -3,6 +3,7 @@ const fs = require("fs")
 const { Viewer } = require("./viewer/viewer.js")
 const { ModelBuilder } = require("./util/modelBuilder.js")
 const { KmpData } = require("./util/kmpData.js")
+const { Kcl } = require("./util/kclLoader.js")
 const { Vec3 } = require("./math/vec3.js")
 
 
@@ -183,11 +184,11 @@ class MainWindow
 		panel.addSlider(null, "Fog", 0.0000001, 0.0002, this.cfg.fogFactor, 0.0000001, (x) => this.cfg.fogFactor = x)
 		panel.addSlider(null, "Point Scale", 0.1, 5, this.cfg.pointScale, 0.1, (x) => this.cfg.pointScale = x)
 		let kclGroup = panel.addGroup(null, "Collision data:")
-		panel.addCheckbox(kclGroup, "Use colors", this.cfg.kclEnableColors, (x) => { this.cfg.kclEnableColors = x; this.openKcl(this.currentKclFilename) })
-		panel.addCheckbox(kclGroup, "Show walls", this.cfg.kclEnableWalls, (x) => { this.cfg.kclEnableWalls = x; this.openKcl(this.currentKclFilename) })
-		panel.addCheckbox(kclGroup, "Show death barriers", this.cfg.kclEnableDeathBarriers, (x) => { this.cfg.kclEnableDeathBarriers = x; this.openKcl(this.currentKclFilename) })
-		panel.addCheckbox(kclGroup, "Show invisible walls", this.cfg.kclEnableInvisible, (x) => { this.cfg.kclEnableInvisible = x; this.openKcl(this.currentKclFilename) })
-		panel.addCheckbox(kclGroup, "Show effects/triggers", this.cfg.kclEnableEffects, (x) => { this.cfg.kclEnableEffects = x; this.openKcl(this.currentKclFilename) })
+		panel.addCheckbox(kclGroup, "Use colors", this.cfg.kclEnableColors, (x) => { this.cfg.kclEnableColors = x; this.refreshKcl() })
+		panel.addCheckbox(kclGroup, "Show walls", this.cfg.kclEnableWalls, (x) => { this.cfg.kclEnableWalls = x; this.refreshKcl() })
+		panel.addCheckbox(kclGroup, "Show death barriers", this.cfg.kclEnableDeathBarriers, (x) => { this.cfg.kclEnableDeathBarriers = x; this.refreshKcl() })
+		panel.addCheckbox(kclGroup, "Show invisible walls", this.cfg.kclEnableInvisible, (x) => { this.cfg.kclEnableInvisible = x; this.refreshKcl() })
+		panel.addCheckbox(kclGroup, "Show effects/triggers", this.cfg.kclEnableEffects, (x) => { this.cfg.kclEnableEffects = x; this.refreshKcl() })
 		
 		let hlOptions =
 		[
@@ -196,7 +197,7 @@ class MainWindow
 			{ str: "Horizontal Walls", value: 2 },
 			{ str: "Barrel Roll Walls", value: 3 },
 		]
-		panel.addSelectionDropdown(kclGroup, "Highlight", this.cfg.kclHighlighter, hlOptions, true, false, (x) => { this.cfg.kclHighlighter = x; this.openKcl(this.currentKclFilename) })
+		panel.addSelectionDropdown(kclGroup, "Highlight", this.cfg.kclHighlighter, hlOptions, true, false, (x) => { this.cfg.kclHighlighter = x; this.refreshKcl() })
 	
 		this.refreshTitle()
 		this.viewer.refreshPanels()
@@ -530,8 +531,10 @@ class MainWindow
 		if (filename == null)
 			return
 		
-		let kclData = fs.readFileSync(filename)
-		let modelBuilder = require("./util/kclLoader.js").KclLoader.load(kclData, this.cfg)
+		this.viewer.kcl = new Kcl(fs.readFileSync(filename))
+		this.viewer.subviewers[9].cannonTriggers = this.viewer.kcl.getCannonTriggers()
+		require('fs').appendFile('out.txt', this.viewer.subviewers[9].cannonTriggers.toString() + '\n')
+		let modelBuilder = this.viewer.kcl.setProperties(this.cfg).refreshModel()
 		this.viewer.setModel(modelBuilder)
 		this.currentKclFilename = filename
 		
@@ -539,6 +542,16 @@ class MainWindow
 			this.viewer.centerView()
 		
 		this.noModelLoaded = false
+	}
+
+
+	refreshKcl(refreshProperties = true)
+	{
+		if (refreshProperties)
+			this.viewer.kcl.setProperties(this.cfg)
+
+		let modelBuilder = this.viewer.kcl.refreshModel()
+		this.viewer.setModel(modelBuilder)
 	}
 }
 
