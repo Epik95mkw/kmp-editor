@@ -129,9 +129,26 @@ class Viewer
 		
 		this.subviewerRoutes = this.subviewers[6]
 		
-		this.currentSubviewer = this.subviewers[0]
-		
+		//this.currentSubviewer = this.subviewers[0]
+		//alert("test1")
+		this.activeSubviewers = new Array(this.subviewers.length).fill(false)
+		this.activeSubviewers[0] = true
+		//alert("test2")
 		this.render()
+	}
+
+
+	getActiveSubviewers()
+	{
+		let s = []
+
+		for (let i = 0; i < this.subviewers.length; i++)
+		{
+			if (this.activeSubviewers[i])
+				s.push(this.subviewers[i])
+		}
+
+		return s
 	}
 	
 	
@@ -179,20 +196,8 @@ class Viewer
 	
 	setSubviewer(subviewer)
 	{
-		if (this.currentSubviewer != null && this.currentSubviewer != subviewer)
-		{
-			this.currentSubviewer.destroy()
-			this.currentSubviewer.panel.setOpen(false)
-		}
-		
-		this.currentSubviewer = subviewer
-		
-		if (this.currentSubviewer != null)
-		{
-			this.currentSubviewer.refresh()
-			this.currentSubviewer.panel.setOpen(true)
-		}
-		
+		let i = this.subviewers.findIndex(s => s == subviewer)
+		this.activeSubviewers[i] = true
 		this.render()
 	}
 	
@@ -245,14 +250,17 @@ class Viewer
 		this.material.program.use(this.gl).setVec4(this.gl, "uAmbientColor", [ambient, ambient, ambient, 1])
 		this.materialColor.program.use(this.gl).setVec4(this.gl, "uAmbientColor", [ambient, ambient, ambient, 1])
 		this.materialColor.program.use(this.gl).setFloat(this.gl, "uFogDensity", this.cfg.fogFactor)
-		
-		if (this.currentSubviewer != null && this.currentSubviewer.drawBeforeModel)
-			this.currentSubviewer.drawBeforeModel()
+		//alert("test2.5")
+		for (let subviewer of this.getActiveSubviewers())
+			if (subviewer.drawBeforeModel)
+				subviewer.drawBeforeModel()
 		
 		this.scene.render(this.gl, this.getCurrentCamera())
-		
-		if (this.currentSubviewer != null && this.currentSubviewer.drawAfterModel)
-			this.currentSubviewer.drawAfterModel()
+		//alert("test3")
+		for (let subviewer of this.getActiveSubviewers())
+			if (subviewer.drawAfterModel)
+				subviewer.drawAfterModel()
+		//alert("test4")
 	}
 	
 	
@@ -345,9 +353,9 @@ class Viewer
 			return
 		}
 		
-		if (this.currentSubviewer != null)
+		for (let subviewer of this.getActiveSubviewers())
 		{
-			if (this.currentSubviewer.onKeyDown(ev))
+			if (subviewer.onKeyDown(ev))
 			{
 				ev.preventDefault()
 				this.render()
@@ -407,8 +415,8 @@ class Viewer
 			
 			let mouse3DPos = hit ? hit.position : ray.origin.add(ray.direction.scale(1000))
 			
-			if (this.currentSubviewer != null)
-				this.currentSubviewer.onMouseDown(ev, mouse.x, mouse.y, cameraPos, ray, hit, distToHit, mouse3DPos)
+			for (let subviewer of this.getActiveSubviewers())
+				subviewer.onMouseDown(ev, mouse.x, mouse.y, cameraPos, ray, hit, distToHit, mouse3DPos)
 		}
 		
 		this.mouseLastClickDate = new Date()
@@ -463,10 +471,10 @@ class Viewer
 				this.mouseMoveOffsetPanDelta = delta
 				this.mouseMoveOffsetRaycast = hit
 			}
-			
-			if (this.currentSubviewer != null)
-				this.currentSubviewer.onMouseMove(ev, mouse.x, mouse.y, cameraPos, ray, hit, distToHit)
-			
+
+			for (let subviewer of this.getActiveSubviewers())
+				subviewer.onMouseMove(ev, mouse.x, mouse.y, cameraPos, ray, hit, distToHit)
+
 			this.mouseLast = mouse
 			this.render()
 		}
@@ -476,8 +484,8 @@ class Viewer
 			if (hit != null && this.enableDebugRaycast)
 				  this.debugRaycastRenderer.setTranslation(hit.position)
 			
-			if (this.currentSubviewer != null)
-				this.currentSubviewer.onMouseMove(ev, mouse.x, mouse.y, cameraPos, ray, hit, distToHit)
+			for (let subviewer of this.getActiveSubviewers())
+				subviewer.onMouseMove(ev, mouse.x, mouse.y, cameraPos, ray, hit, distToHit)
 			
 			//console.log(this.pointToScreen(ray.origin.add(ray.direction.scale(10000))))
 		}
@@ -493,8 +501,9 @@ class Viewer
 		
 		let mouse = this.getMousePosFromEvent(ev)
 		
-		if (this.currentSubviewer != null && this.currentSubviewer.onMouseUp)
-			this.currentSubviewer.onMouseUp(ev, mouse.x, mouse.y)
+		for (let subviewer of this.getActiveSubviewers())
+			if (subviewer != null && subviewer.onMouseUp)
+				subviewer.onMouseUp(ev, mouse.x, mouse.y)
 		
 		this.window.setUndoPoint()
 		this.mouseDown = false

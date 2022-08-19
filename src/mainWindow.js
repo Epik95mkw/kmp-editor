@@ -286,7 +286,7 @@ class MainWindow
 	{
 		if (!this.undoNeedsNewSlot)
 		{
-			this.undoStack[this.undoPointer].subviewer = this.viewer.currentSubviewer
+			this.undoStack[this.undoPointer].subviewers = [...this.viewer.activeSubviewers]
 			return
 		}
 
@@ -294,7 +294,7 @@ class MainWindow
 		
 		this.undoStack.push({
 			data: this.currentKmpData.clone(),
-			subviewer: this.viewer.currentSubviewer,
+			subviewers: [...this.viewer.activeSubviewers],
 			currentRouteIndex: this.viewer.subviewerRoutes.currentRouteIndex
 		})
 		
@@ -1031,6 +1031,102 @@ class Panel
 			group.appendChild(div)
 		
 		return select
+	}
+}
+
+
+class Group
+{
+	constructor(window, parentDiv, name, open = true, onToggle = null, closable = true, onRefreshView = null)
+	{
+		this.window = window
+		this.parentDiv = parentDiv
+		this.name = name
+		this.closable = closable
+		this.open = open
+		this.onToggle = onToggle
+		
+		this.panelDiv = document.createElement("div")
+		this.panelDiv.className = "panel"
+		this.parentDiv.appendChild(this.panelDiv)
+		
+		this.titleButton = document.createElement("button")
+		this.titleButton.className = "panelTitle"
+		this.titleButton.innerHTML = "▶ " + name
+		this.panelDiv.appendChild(this.titleButton)
+		
+		this.contentDiv = document.createElement("div")
+		this.contentDiv.className = "panelContent"
+		this.contentDiv.style.display = "none"
+		this.panelDiv.appendChild(this.contentDiv)
+		
+		this.titleButton.onclick = () => this.toggleOpen()
+		this.onRefreshView = (onRefreshView != null ? onRefreshView : () => { })
+		
+		this.onDestroy = []
+		
+		this.refreshOpen()
+	}
+	
+	
+	destroy()
+	{
+		for (let f of this.onDestroy)
+			f()
+		
+		this.onDestroy = []
+		
+		if (this.panelDiv)
+			this.parentDiv.removeChild(this.panelDiv)
+	}
+	
+	
+	clearContent()
+	{
+		for (let f of this.onDestroy)
+			f()
+		
+		this.onDestroy = []
+		
+		while (this.contentDiv.lastChild)
+			this.contentDiv.removeChild(this.contentDiv.lastChild)
+	}
+	
+	
+	setOpen(open)
+	{
+		let changed = (this.open != open)
+		
+		this.open = open
+		this.refreshOpen()
+		
+		if (changed && this.onToggle != null)
+			this.onToggle(this.open)
+	}
+	
+	
+	toggleOpen()
+	{
+		this.open = !this.open
+		this.refreshOpen()
+		
+		if (this.onToggle != null)
+			this.onToggle(this.open)
+	}
+	
+	
+	refreshOpen()
+	{
+		if (this.open)
+		{
+			this.contentDiv.style.display = "block"
+			this.titleButton.innerHTML = "▼ " + this.name
+		}
+		else
+		{
+			this.contentDiv.style.display = "none"
+			this.titleButton.innerHTML = "▶ " + this.name
+		}
 	}
 }
 

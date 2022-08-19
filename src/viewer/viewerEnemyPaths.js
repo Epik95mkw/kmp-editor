@@ -90,6 +90,11 @@ class ViewerEnemyPaths extends PathViewer
 			{ str: "Force Drift", value: 3 },
 		]
 		panel.addSelectionDropdown(selectionGroup, "Setting 2", selectedPoints.map(p => p.setting2), setting2Options, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].setting2 = x })
+	
+		// Testing
+		panel.addSelectionNumericInput(selectionGroup, "S1", 1, 0xffff, selectedPoints.map(p =>  p.setting1), 1.0, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].setting1 = x })
+		panel.addSelectionNumericInput(selectionGroup, "S2", 1, 0xff,   selectedPoints.map(p =>  p.setting2), 1.0, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].setting2 = x })
+		panel.addSelectionNumericInput(selectionGroup, "S3", 1, 0xff,   selectedPoints.map(p =>  p.setting3), 1.0, 1.0, enabled, multiedit, (x, i) => { this.window.setNotSaved(); selectedPoints[i].setting3 = x })
 	}
 	
 	
@@ -150,7 +155,7 @@ class ViewerEnemyPaths extends PathViewer
 			point.renderer
 				.setTranslation(point.pos)
 				.setScaling(new Vec3(scale, scale, scale))
-				.setDiffuseColor(p == 0 ? [0.6, 0, 0, 1] : useMushroom ? [1, 0.5, 0.95, 1] : [1, 0, 0, 1])
+				.setDiffuseColor(p == 0 ? [0.6, 0, 0, 1] : useMushroom ? [1, 0.5, 0.95, 1] : point.setting1 == 5 ? [0, 1, 0, 1] : [1, 0, 0, 1])
 				
 			let sizeCircleScale = point.size * 50
 			point.rendererSizeCircle
