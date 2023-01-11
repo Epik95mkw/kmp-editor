@@ -8,9 +8,16 @@ const { Geometry } = require("../math/geometry.js")
 
 class ViewerCameras extends PointViewer
 {
-    constructor(window, viewer, data)
+	constructor(window, viewer, data)
 	{
 		super(window, viewer, data)
+
+		this.moveElems = ["pos", "viewPosStart", "viewPosEnd"]
+
+		this.modelLink = new ModelBuilder()
+			.addCylinder(-100, -100, 0, 100, 100, 1)
+			.calculateNormals()
+			.makeModel(viewer.gl)
 	}
 
 
@@ -108,10 +115,117 @@ class ViewerCameras extends PointViewer
 
     refresh()
 	{
+		for (let point of this.data.cameras.nodes)
+		{
+			if (point.selected === undefined)
+			{
+				point.selected = {}
+				point.moveOrigin = {}
+
+				for (let e of this.moveElems)
+				{
+					point.selected[e] = false
+					point.moveOrigin[e] = point[e]
+				}
+			}
+		}
+			
 		super.refresh()
+
+		for (let point of this.data.cameras.nodes)
+		{
+			point.rViewStart = new GfxNodeRendererTransform()
+				.attach(this.scene.root)
+				.setModel(this.modelPoint)
+				.setMaterial(this.viewer.material)
+
+			point.rViewStartSelected = new GfxNodeRendererTransform()
+				.attach(this.sceneAfter.root)
+				.setModel(this.modelPointSelection)
+				.setMaterial(this.viewer.materialUnshaded)
+				.setEnabled(false)
+				
+			point.rViewStartSelectedCore = new GfxNodeRenderer()
+				.attach(point.rendererSelected)
+				.setModel(this.modelPoint)
+				.setMaterial(this.viewer.material)
+			
+			point.rViewStartLink = new GfxNodeRendererTransform()
+				.attach(this.scene.root)
+				.setModel(this.modelLink)
+				.setMaterial(this.viewer.material)
+				
+			
+			point.rViewEnd = new GfxNodeRendererTransform()
+				.attach(this.scene.root)
+				.setModel(this.modelPoint)
+				.setMaterial(this.viewer.material)
+
+			point.rViewEndSelected = new GfxNodeRendererTransform()
+				.attach(this.sceneAfter.root)
+				.setModel(this.modelPointSelection)
+				.setMaterial(this.viewer.materialUnshaded)
+				.setEnabled(false)
+				
+			point.rViewEndSelectedCore = new GfxNodeRenderer()
+				.attach(point.rendererSelected)
+				.setModel(this.modelPoint)
+				.setMaterial(this.viewer.material)
+
+			point.rViewEndLink = new GfxNodeRendererTransform()
+				.attach(this.scene.root)
+				.setModel(this.modelLink)
+				.setMaterial(this.viewer.material)
+				
+            this.renderers.push(point.rViewStart)
+			this.renderers.push(point.rViewStartSelected)
+			this.renderers.push(point.rViewStartSelectedCore)
+			this.renderers.push(point.rViewStartLink)
+			this.renderers.push(point.rViewEnd)
+			this.renderers.push(point.rViewEndSelected)
+			this.renderers.push(point.rViewStartSelectedCore)
+			this.renderers.push(point.rViewEndLink)
+
+			point.rendererLinks = [point.rViewStartLink, point.rViewEndLink]
+		}
+		
 		this.refreshPanels()
 	}
 
+	
+	getHoveringOverElement(cameraPos, ray, distToHit, includeSelected = true)
+	{
+		let elem = null
+		
+		let minDistToCamera = distToHit + 1000
+		let minDistToPoint = 1000000
+		for (let e of this.moveElems)
+		{
+			for (let point of this.data.cameras.nodes)
+			{
+				if (!includeSelected && point.selected[e])
+					continue
+				
+				let distToCamera = point[e].sub(cameraPos).magn()
+				if (distToCamera >= minDistToCamera)
+					continue
+				
+				let scale = this.viewer.getElementScale(point[e])
+				
+				let pointDistToRay = Geometry.linePointDistance(ray.origin, ray.direction, point[e])
+				
+				if (pointDistToRay < 150 * scale * 4 && pointDistToRay < minDistToPoint)
+				{
+					elem = { point, which: e }
+					minDistToCamera = distToCamera
+					minDistToPoint = pointDistToRay
+				}
+			}
+		}
+		
+		return elem
+	}
+	
 
     toggleAllSelectionByType()
 	{
@@ -140,6 +254,155 @@ class ViewerCameras extends PointViewer
 		return false
 	}
 
+	
+	onMouseDown(ev, x, y, cameraPos, ray, hit, distToHit, mouse3DPos)
+	{
+		this.linkingPoints = false
+		
+		for (let point of this.data.cameras.nodes)
+			point.moveOrigin = this.moveElems.reduce((obj, p) => { obj[p] = point[p] }, {})
+		
+		let hoveringOverElem = this.getHoveringOverElement(cameraPos, ray, distToHit)
+		
+		if (ev.altKey || (!ev.ctrlKey && (hoveringOverElem == null || !hoveringOverElem.point.selected[hoveringOverElem.which])))
+			this.unselectAll()
+
+		if (ev.ctrlKey)
+			this.multiSelect = true
+		
+		if (hoveringOverElem != null)
+		{
+			if (ev.altKey)
+			{
+				if (hoveringOverElem.which !== "pos")
+					return
+				
+				if (this.data.cameras.nodes.length >= this.data.cameras.maxNodes)
+				{
+					alert("KMP error!\n\nMaximum number of points surpassed (" + this.data.cameras.maxNodes + ")")
+					return
+				}
+
+				let newPoint = this.data.cameras.addNode()
+				this.data.cameras.onCloneNode(newPoint, hoveringOverElem)
+				
+				this.refresh()
+				
+				newPoint.selected = this.moveElems.reduce((obj, p) => { obj[p] = true }, {})
+				this.viewer.setCursor("-webkit-grabbing")
+				this.refreshPanels()
+				this.window.setNotSaved()
+			}
+			else
+			{
+				hoveringOverElem.point.selected[hoveringOverElem.which] = true
+				this.refreshPanels()
+				this.viewer.setCursor("-webkit-grabbing")
+			}
+		}
+		else if (ev.altKey)
+		{
+			if (this.data.cameras.nodes.length >= this.data.cameras.maxNodes)
+			{
+				alert("KMP error!\n\nMaximum number of points surpassed (" + this.data.cameras.maxNodes + ")")
+				return
+			}
+			let newPoint = this.data.cameras.addNode()
+			newPoint.pos = mouse3DPos
+			newPoint.viewPosStart = mouse3DPos.add(new Vec3(100, 0, 0))
+			newPoint.viewPosEnd = mouse3DPos.add(new Vec3(-100, 0, 0))
+			
+			this.refresh()
+			newPoint.selected = this.moveElems.reduce((obj, p) => { obj[p] = true }, {})
+			this.viewer.setCursor("-webkit-grabbing")
+			this.refreshPanels()
+			this.window.setNotSaved()
+		}
+	}
+
+
+	onMouseMove(ev, x, y, cameraPos, ray, hit, distToHit)
+	{
+		if (!this.viewer.mouseDown)
+		{
+			let lastHover = this.hoveringOverPoint
+			this.hoveringOverPoint = this.getHoveringOverElement(cameraPos, ray, distToHit)
+			
+			if (this.hoveringOverPoint != null)
+			{
+				this.viewer.setCursor("-webkit-grab")
+			
+				if (lastHover == null ||
+					this.hoveringOverPoint.point != lastHover.point ||
+					this.hoveringOverPoint.which != lastHover.which)
+					this.viewer.render()
+			}
+			else if (lastHover != null)
+				this.viewer.render()
+		}
+		else if (ev.ctrlKey)
+		{
+			let lastHover = this.hoveringOverPoint
+			this.hoveringOverPoint = this.getHoveringOverElement(cameraPos, ray, distToHit)
+			
+			if (this.hoveringOverPoint != null)
+			{
+				this.viewer.setCursor("-webkit-grab")
+				this.hoveringOverPoint.point.selected[this.hoveringOverPoint.which] = true
+				this.refreshPanels()
+
+				if (lastHover == null ||
+					this.hoveringOverPoint.point != lastHover.point ||
+					this.hoveringOverPoint.which != lastHover.which)
+					this.viewer.render()
+			}
+			else if (lastHover != null)
+				this.viewer.render()
+		}
+		else if (!this.multiSelect && this.viewer.mouseAction == "move")
+		{
+			let linkToPoint = this.getHoveringOverElement(cameraPos, ray, distToHit, false)
+			
+			for (let point of this.data.cameras.nodes)
+			{
+				for (let e of this.moveElems)
+				{
+					if (!point.selected)
+						continue
+					
+					this.window.setNotSaved()
+					this.viewer.setCursor("-webkit-grabbing")
+					
+					if (this.linkingPoints && linkToPoint != null)
+					{
+						point[e] = linkToPoint[e]
+					}
+					else
+					{					
+						let screenPosMoved = this.viewer.pointToScreen(point.moveOrigin)
+						screenPosMoved.x += this.viewer.mouseMoveOffsetPixels.x
+						screenPosMoved.y += this.viewer.mouseMoveOffsetPixels.y
+						let pointRayMoved = this.viewer.getScreenRay(screenPosMoved.x, screenPosMoved.y)
+						
+						let hit = this.viewer.collision.raycast(pointRayMoved.origin, pointRayMoved.direction)
+						if (hit != null)
+							point[e] = hit.position
+						else
+						{
+							let screenPos = this.viewer.pointToScreen(point.moveOrigin)
+							let pointRay = this.viewer.getScreenRay(screenPos.x, screenPos.y)
+							let origDistToScreen = point.moveOrigin.sub(pointRay.origin).magn()
+							
+							point[e] = pointRayMoved.origin.add(pointRayMoved.direction.scale(origDistToScreen))
+						}
+					}
+				}
+			}
+			
+			this.refreshPanels()
+		}
+	}
+	
 
     drawAfterModel()
 	{
@@ -183,6 +446,48 @@ class ViewerCameras extends PointViewer
 				.setCustomMatrix(pointScale.mul(matrixDirection))
 				.setDiffuseColor([0.75, 0.1, 1, 1])
 				.setEnabled(this.viewer.cfg.enableRotationRender)
+			
+			point.rViewStart
+				.setTranslation(point.viewPosStart)
+				.setScaling(new Vec3(scale, scale, scale))
+				.setDiffuseColor([0.1, 0.8, 0.1, 1])
+			
+			point.rViewStartSelected
+				.setTranslation(point.viewPosStart)
+				.setScaling(new Vec3(scale, scale, scale))
+				.setDiffuseColor([0.2, 1.0, 0.2, 1])
+				.setEnabled(point.selected)
+			
+			point.rViewStartSelectedCore
+				.setDiffuseColor([0.1, 0.8, 0.1, 1])
+			
+			point.rViewEnd
+				.setTranslation(point.viewPosEnd)
+				.setScaling(new Vec3(scale, scale, scale))
+				.setDiffuseColor([0.8, 0.1, 0.1, 1])
+			
+			point.rViewEndSelected
+				.setTranslation(point.viewPosEnd)
+				.setScaling(new Vec3(scale, scale, scale))
+				.setDiffuseColor([1.0, 0.2, 0.2, 1])
+				.setEnabled(point.selected)
+			
+			point.rViewEndSelectedCore
+				.setDiffuseColor([0.8, 0.1, 0.1, 1])
+			
+			let viewPosList = [point.viewPosStart, point.viewPosEnd]
+			/*for (let n = 0; n < 2; n++)
+			{
+				nextPos = viewPosList[n]
+				
+				let matrixScale = Mat4.scale(scale, scale, nextPos.sub(point.pos).magn())
+				let matrixAlign = Mat4.rotationFromTo(new Vec3(0, 0, 1), nextPos.sub(point.pos).normalize())
+				let matrixTranslate = Mat4.translation(point.pos.x, point.pos.y, point.pos.z)
+				
+				point.rendererLinks[n]
+					.setCustomMatrix(matrixScale.mul(matrixAlign.mul(matrixTranslate)))
+					.setDiffuseColor([0.5, 0.5, 0.5, 0.5])
+			}*/
 		}
 		
 		this.scene.render(this.viewer.gl, this.viewer.getCurrentCamera())
