@@ -1,37 +1,21 @@
 const { GfxScene, GfxCamera, GfxMaterial, GfxModel, GfxNodeRenderer, GfxNodeRendererTransform } = require("../gl/scene.js")
+const { SubViewer } = require("./subViewer.js")
 const { ModelBuilder } = require("../util/modelBuilder.js")
 const { Vec3 } = require("../math/vec3.js")
 const { Mat4 } = require("../math/mat4.js")
 const { Geometry } = require("../math/geometry.js")
 
 
-class PathViewer
+class PathViewer extends SubViewer
 {
 	constructor(window, viewer, data)
 	{
-		this.window = window
-		this.viewer = viewer
-		this.data = data
-        this.renderers = []
-		
-		this.scene = new GfxScene()
-		this.sceneAfter = new GfxScene()
+		super(window, viewer, data)
+
 		this.sceneSizeCircles = new GfxScene()
 		
-		this.hoveringOverPoint = null
 		this.linkingPoints = false
-		this.ctrlIsHeld = false
 		this.altIsHeld = false
-		
-		this.modelPoint = new ModelBuilder()
-			.addSphere(-150, -150, -150, 150, 150, 150)
-			.calculateNormals()
-			.makeModel(viewer.gl)
-		
-		this.modelPointSelection = new ModelBuilder()
-			.addSphere(-250, -250, 250, 250, 250, -250)
-			.calculateNormals()
-			.makeModel(viewer.gl)
 			
 		this.modelPath = new ModelBuilder()
 			.addCylinder(-100, -100, 0, 100, 100, 1)
@@ -50,60 +34,17 @@ class PathViewer
 	}
 	
 	
-	setData(data)
-	{
-		this.data = data
-		this.refresh()
-	}
-	
-	
-	destroy()
-	{
-		for (let r of this.renderers)
-			r.detach()
-		
-		this.renderers = []
-	}
-	
-	
 	refresh()
 	{
-		for (let r of this.renderers)
-			r.detach()
-		
-		this.renderers = []
+		super.refresh()
 		
 		for (let point of this.points().nodes)
-		{
-			if (point.selected === undefined)
-			{
-				point.selected = false
-				point.moveOrigin = point.pos
-			}
-			
-			point.renderer = new GfxNodeRendererTransform()
-				.attach(this.scene.root)
-				.setModel(this.modelPoint)
-				.setMaterial(this.viewer.material)
-			
-			point.rendererSelected = new GfxNodeRendererTransform()
-				.attach(this.sceneAfter.root)
-				.setModel(this.modelPointSelection)
-				.setMaterial(this.viewer.materialUnshaded)
-				.setEnabled(false)
-				
-			point.rendererSelectedCore = new GfxNodeRenderer()
-				.attach(point.rendererSelected)
-				.setModel(this.modelPoint)
-				.setMaterial(this.viewer.material)
-				
+		{	
 			point.rendererSizeCircle = new GfxNodeRendererTransform()
 				.attach(this.sceneSizeCircles.root)
 				.setModel(this.modelSizeCircle)
 				.setMaterial(this.viewer.materialUnshaded)
 				
-			this.renderers.push(point.renderer)
-			this.renderers.push(point.rendererSelected)
 			this.renderers.push(point.rendererSizeCircle)
 				
 			point.rendererOutgoingPaths = []
@@ -130,106 +71,7 @@ class PathViewer
 		}
 	}
 	
-	
-	getHoveringOverElement(cameraPos, ray, distToHit, includeSelected = true)
-	{
-		let elem = null
-		
-		let minDistToCamera = distToHit + 1000
-		let minDistToPoint = 1000000
-		for (let point of this.points().nodes)
-		{
-			if (!includeSelected && point.selected)
-				continue
-			
-			let distToCamera = point.pos.sub(cameraPos).magn()
-			if (distToCamera >= minDistToCamera)
-				continue
-			
-			let scale = this.viewer.getElementScale(point.pos)
-			
-			let pointDistToRay = Geometry.linePointDistance(ray.origin, ray.direction, point.pos)
-			
-			if (pointDistToRay < 150 * scale * 4 && pointDistToRay < minDistToPoint)
-			{
-				elem = point
-				minDistToCamera = distToCamera
-				minDistToPoint = pointDistToRay
-			}
-		}
-		
-		return elem
-	}
-	
-	
-	selectAll()
-	{
-		for (let point of this.points().nodes)
-			point.selected = true
-		
-		this.refreshPanels()
-	}
-	
-	
-	unselectAll()
-	{
-		for (let point of this.points().nodes)
-			point.selected = false
-		
-		this.refreshPanels()
-	}
-	
-	
-	toggleAllSelection()
-	{
-		let hasSelection = (this.points().nodes.find(p => p.selected) != null)
-		
-		if (hasSelection)
-			this.unselectAll()
-		else
-			this.selectAll()
-	}
-	
-	
-	deleteSelectedPoints()
-	{
-		let pointsToDelete = []
-		
-		for (let point of this.points().nodes)
-		{
-			if (!point.selected)
-				continue
-			
-			pointsToDelete.push(point)
-		}
-		
-		for (let point of pointsToDelete)
-			this.points().removeNode(point)
-		
-		this.refresh()
-		this.window.setNotSaved()
-		this.window.setUndoPoint()
-	}
 
-
-	snapSelectedToY()
-	{
-		for (let point of this.points().nodes)
-		{
-			if (point.selected)
-			{
-				let hit = this.viewer.collision.raycast(point.pos, new Vec3(0, 0, 1))
-				if (hit != null && point.pos.sub(hit.position).magn() > 1)
-					point.pos = hit.position
-			}
-		}
-		
-		this.refresh()
-		this.window.setNotSaved()
-		this.window.setUndoPoint()
-	}
-	
-	
 	unlinkSelectedPoints()
 	{
 		for (let point of this.points().nodes)
@@ -279,25 +121,11 @@ class PathViewer
 	
 	onKeyDown(ev)
 	{
+		if (super.onKeyDown(ev))
+			return true
+
 		switch (ev.key)
 		{
-			case "A":
-			case "a":
-				this.toggleAllSelection()
-				return true
-			
-			case "Backspace":
-			case "Delete":
-			case "X":
-			case "x":
-				this.deleteSelectedPoints()
-				return true
-
-			case "Y":
-			case "y":
-				this.snapSelectedToY()
-				return true
-				
 			case "U":
 			case "u":
 				this.unlinkSelectedPoints()
@@ -312,6 +140,15 @@ class PathViewer
 		return false
 	}
 	
+
+	onMouseDown2(ev, x, y, cameraPos, ray, hit, distToHit, mouse3DPos)
+	{
+		this.linkingPoints = false
+		if (ev.altKey)
+			this.altIsHeld = true
+
+		super.onMouseDown(ev, x, y, cameraPos, ray, hit, distToHit, mouse3DPos)
+	}
 	
 	onMouseDown(ev, x, y, cameraPos, ray, hit, distToHit, mouse3DPos)
 	{
@@ -348,8 +185,6 @@ class PathViewer
 
 				let newPoint = this.points().addNode()
 				this.points().onCloneNode(newPoint, hoveringOverElem)
-				newPoint.pos = hoveringOverElem.pos
-				newPoint.size = hoveringOverElem.size
 				
 				this.points().linkNodes(hoveringOverElem, newPoint)
 				
